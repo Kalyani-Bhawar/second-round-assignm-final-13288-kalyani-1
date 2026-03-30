@@ -20,7 +20,9 @@ public class Cart {
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<CartItem> items = new HashSet<>();
 
-    public Cart() {}
+    public Cart() {
+        this.items = new HashSet<>();
+    }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

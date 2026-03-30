@@ -1,6 +1,8 @@
 package com.ecommerce.service;
 
-import com.ecommerce.controller.AuthController.*;
+import com.ecommerce.dto.JwtResponse;
+import com.ecommerce.dto.LoginRequest;
+import com.ecommerce.dto.SignupRequest;
 import com.ecommerce.model.Role;
 import com.ecommerce.model.User;
 import com.ecommerce.repository.UserRepository;
@@ -12,8 +14,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-
 import org.springframework.stereotype.Service;
 
 @Service
@@ -61,20 +61,21 @@ public class AuthService {
                 .password(encoder.encode(signUpRequest.getPassword()))
                 .build();
 
+        // Validate and determine user role
         String strRole = signUpRequest.getRole();
-        Role role;
-
-        if (strRole == null) {
-            role = Role.ROLE_USER;
+        if (strRole != null && !strRole.trim().isEmpty()) {
+            user.setRole(determineUserRole(strRole));
         } else {
-            if (strRole.equals("admin")) {
-                role = Role.ROLE_ADMIN;
-            } else {
-                role = Role.ROLE_USER;
-            }
+            user.setRole(Role.ROLE_USER);
+        }
+        userRepository.save(user);
+    }
+
+    private Role determineUserRole(String roleString) {
+        if (roleString == null || roleString.trim().isBlank()) {
+            return Role.ROLE_USER;
         }
 
-        user.setRole(role);
-        userRepository.save(user);
+        return roleString.trim().equalsIgnoreCase("admin") ? Role.ROLE_ADMIN : Role.ROLE_USER;
     }
 }

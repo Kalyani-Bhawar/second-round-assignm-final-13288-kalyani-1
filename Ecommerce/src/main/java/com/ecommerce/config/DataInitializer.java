@@ -19,15 +19,19 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if (!userRepository.findByUsername("admin").isPresent()) {
-            User admin = User.builder()
-                    .username("admin")
-                    .email("admin@ecommerce.com")
-                    .password(passwordEncoder.encode("admin123"))
-                    .role(Role.ROLE_ADMIN)
-                    .build();
-            userRepository.save(admin);
-            System.out.println("Default admin user created: admin / admin123");
+        try {
+            if (!userRepository.findByUsername("admin").isPresent()) {
+                User admin = User.builder()
+                        .username("admin")
+                        .email("admin@ecommerce.com")
+                        .password(passwordEncoder.encode("admin123"))
+                        .role(Role.ROLE_ADMIN)
+                        .build();
+                userRepository.save(admin);
+                System.out.println("Default admin user created: admin / admin123");
+            }
+        } catch (Exception e) {
+            System.out.println("Could not initialize admin user (tables may not exist yet): " + e.getMessage());
         }
     }
 }

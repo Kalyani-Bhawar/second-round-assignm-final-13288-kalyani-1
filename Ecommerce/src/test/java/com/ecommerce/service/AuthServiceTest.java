@@ -1,6 +1,8 @@
 package com.ecommerce.service;
 
-import com.ecommerce.controller.AuthController.*;
+import com.ecommerce.dto.JwtResponse;
+import com.ecommerce.dto.LoginRequest;
+import com.ecommerce.dto.SignupRequest;
 import com.ecommerce.model.Role;
 import com.ecommerce.model.User;
 import com.ecommerce.repository.UserRepository;
@@ -22,6 +24,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class AuthServiceTest {
@@ -60,7 +63,68 @@ class AuthServiceTest {
 
         authService.registerUser(signupRequest);
 
-        verify(userRepository, times(1)).save(any(User.class));
+        verify(userRepository, times(1)).save(argThat(user -> 
+            user.getUsername().equals("testuser") &&
+            user.getEmail().equals("test@example.com") &&
+            user.getRole().equals(Role.ROLE_USER)
+        ));
+    }
+
+    @Test
+    void testRegisterUser_AdminRole() {
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername("adminuser");
+        signupRequest.setEmail("admin@example.com");
+        signupRequest.setPassword("password");
+        signupRequest.setRole("admin");
+
+        when(userRepository.existsByUsername("adminuser")).thenReturn(false);
+        when(userRepository.existsByEmail("admin@example.com")).thenReturn(false);
+        when(encoder.encode("password")).thenReturn("encodedPassword");
+
+        authService.registerUser(signupRequest);
+
+        verify(userRepository, times(1)).save(argThat(user -> 
+            user.getRole().equals(Role.ROLE_ADMIN)
+        ));
+    }
+
+    @Test
+    void testRegisterUser_NullRole() {
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername("testuser");
+        signupRequest.setEmail("test@example.com");
+        signupRequest.setPassword("password");
+        signupRequest.setRole(null);
+
+        when(userRepository.existsByUsername("testuser")).thenReturn(false);
+        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+        when(encoder.encode("password")).thenReturn("encodedPassword");
+
+        authService.registerUser(signupRequest);
+
+        verify(userRepository, times(1)).save(argThat(user -> 
+            user.getRole().equals(Role.ROLE_USER) // Should default to ROLE_USER
+        ));
+    }
+
+    @Test
+    void testRegisterUser_BlankRole() {
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername("testuser");
+        signupRequest.setEmail("test@example.com");
+        signupRequest.setPassword("password");
+        signupRequest.setRole("   ");
+
+        when(userRepository.existsByUsername("testuser")).thenReturn(false);
+        when(userRepository.existsByEmail("test@example.com")).thenReturn(false);
+        when(encoder.encode("password")).thenReturn("encodedPassword");
+
+        authService.registerUser(signupRequest);
+
+        verify(userRepository, times(1)).save(argThat(user -> 
+            user.getRole().equals(Role.ROLE_USER) // Should default to ROLE_USER
+        ));
     }
 
     @Test
@@ -69,6 +133,18 @@ class AuthServiceTest {
         signupRequest.setUsername("existinguser");
 
         when(userRepository.existsByUsername("existinguser")).thenReturn(true);
+
+        assertThrows(RuntimeException.class, () -> authService.registerUser(signupRequest));
+    }
+
+    @Test
+    void testRegisterUser_EmailTaken() {
+        SignupRequest signupRequest = new SignupRequest();
+        signupRequest.setUsername("newuser");
+        signupRequest.setEmail("existing@example.com");
+
+        when(userRepository.existsByUsername("newuser")).thenReturn(false);
+        when(userRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         assertThrows(RuntimeException.class, () -> authService.registerUser(signupRequest));
     }
@@ -93,5 +169,26 @@ class AuthServiceTest {
         assertEquals("testuser", response.getUsername());
         assertEquals("jwtToken", response.getToken());
         assertEquals("ROLE_USER", response.getRole());
+    }
+
+    @Test
+    void testAuthenticateUser_AdminRole() {
+        LoginRequest loginRequest = new LoginRequest();
+        loginRequest.setUsername("admin");
+        loginRequest.setPassword("password");
+
+        Authentication authentication = mock(Authentication.class);
+        org.springframework.security.core.userdetails.User userDetails = 
+            new org.springframework.security.core.userdetails.User("admin", "password", 
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_ADMIN")));
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(jwtUtils.generateJwtToken(authentication)).thenReturn("jwtToken");
+
+        JwtResponse response = authService.authenticateUser(loginRequest);
+
+        assertEquals("admin", response.getUsername());
+        assertEquals("ROLE_ADMIN", response.getRole());
     }
 }

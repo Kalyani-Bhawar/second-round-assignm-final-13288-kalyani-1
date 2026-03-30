@@ -1,6 +1,7 @@
 package com.ecommerce.service;
 
 import com.ecommerce.model.*;
+import com.ecommerce.repository.CartItemRepository;
 import com.ecommerce.repository.OrderRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,17 +20,49 @@ public class OrderService {
     @Autowired
     private CartService cartService;
 
+    @Autowired
+    private CartItemRepository cartItemRepository;
+
     @Transactional
     public Order createOrder(User user, String shippingAddress) {
+        if (shippingAddress == null || shippingAddress.trim().isEmpty()) {
+            throw new RuntimeException("Shipping address is required");
+        }
+
         Cart cart = cartService.getCartByUser(user);
-        if (cart.getItems().isEmpty()) {
+        
+        // Validate cart items are not null and not empty
+        if (cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new RuntimeException("Cart is empty");
         }
 
-        BigDecimal total = cart.getItems().stream()
-                .map(item -> item.getProduct().getPrice().multiply(new BigDecimal(item.getQuantity())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Persist cart items first to ensure they have database IDs
+        cartItemRepository.saveAll(cart.getItems());
 
+        // Calculate total price
+        BigDecimal total = calculateCartTotal(cart);
+
+        // Create order with items
+        Order order = createOrderFromCart(user, shippingAddress, total, cart);
+        
+        Order savedOrder = orderRepository.save(order);
+        cartService.clearCart(user);
+        return savedOrder;
+    }
+
+    private BigDecimal calculateCartTotal(Cart cart) {
+        return cart.getItems().stream()
+                .map(item -> {
+                    if (item.getProduct().getPrice() == null) {
+                        throw new RuntimeException("Product price is missing");
+                    }
+                    return item.getProduct().getPrice()
+                            .multiply(new BigDecimal(item.getQuantity()));
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private Order createOrderFromCart(User user, String shippingAddress, BigDecimal total, Cart cart) {
         Order order = Order.builder()
                 .user(user)
                 .shippingAddress(shippingAddress)
@@ -47,9 +80,7 @@ public class OrderService {
                         .build())
                 .collect(Collectors.toSet()));
 
-        Order savedOrder = orderRepository.save(order);
-        cartService.clearCart(user);
-        return savedOrder;
+        return order;
     }
 
     public List<Order> getOrdersByUser(User user) {
